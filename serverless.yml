@@ -1,17 +1,86 @@
 service: simple-finance-api
 
+
 provider:
   name: aws
   runtime: nodejs18.x
   region: us-east-1
+  environment:
+    USERS_TABLE: ${self:service}-users
+    ACCOUNTS_TABLE: ${self:service}-accounts
+    JWT_SECRET: ${env:JWT_SECRET}
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:PutItem
+        - dynamodb:GetItem
+        - dynamodb:Query
+      Resource:
+        - arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-users
+        - arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-users/index/*
+        - arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-accounts
+        - arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-accounts/index/*
+
 
 functions:
-  hello:
-    handler: src/handler.hello
+  register:
+    handler: src/auth/authHandler.register
     events:
       - http:
-          path: hello
-          method: get
+          path: auth/register
+          method: post
+          cors: true
+
+  login:
+    handler: src/auth/authHandler.login
+    events:
+      - http:
+          path: auth/login
+          method: post
+          cors: true
+
+  createAccount:
+    handler: src/accounts/accountsHandler.createAccount
+    events:
+      - http:
+          path: account
+          method: post
+          cors: true
 
 plugins:
   - serverless-offline
+
+resources:
+  Resources:
+    UsersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-users
+        AttributeDefinitions:
+          - AttributeName: userId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: userId
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+
+    AccountsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-accounts
+        AttributeDefinitions:
+          - AttributeName: accountId
+            AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: accountId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: UserIdIndex
+            KeySchema:
+              - AttributeName: userId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        BillingMode: PAY_PER_REQUEST
